@@ -79,40 +79,24 @@ async function startBot() {
         const m = chatUpdate.messages[0];
         if (!m.message) return;
 
-        // PENTING: Abaikan pesan yang dikirim oleh bot/admin sendiri agar tidak salah deteksi
-        if (m.key.fromMe) return;
-
         const from = m.key.remoteJid;
-        const isGroup = from.endsWith('@g.us');
-        
-        // --- PERBAIKAN: Ekstraksi Nomor Asli Pelanggan yang Akurat ---
-        let rawJid = isGroup ? m.key.participant : from;
-        
-        if (m.key.remoteJidAlt && !isGroup) {
-            rawJid = m.key.remoteJidAlt;
-        }
-
-        let senderNumber = rawJid ? rawJid.replace(/[^0-9]/g, '') : '';
-        
-        if (!senderNumber || senderNumber.length < 10) {
-            senderNumber = rawJid ? rawJid.split('@')[0].replace(/[^0-9]/g, '') : '';
-        }
-        if (!senderNumber || senderNumber.length < 10) {
-            senderNumber = m.pushName || 'Pelanggan';
-        }
-        // ---------------------------------------------------------
-
         const body = m.message.conversation || m.message.extendedTextMessage?.text || '';
         const text = body.trim();
-
-        console.log(`[LOG] Dari JID: ${from} | Nomor Ekstraksi: ${senderNumber} | Teks: "${text}" | fromMe: ${m.key.fromMe}`);
-
         const isAdminAction = m.key.fromMe;
 
+        // Ekstraksi Nomor Pelanggan yang bersih dari JID
+        let senderNumber = from ? from.replace(/[^0-9]/g, '') : '';
+        if (senderNumber.length < 10) {
+            senderNumber = m.pushName || 'Pelanggan';
+        }
+
+        console.log(`[LOG] Dari JID: ${from} | Nomor: ${senderNumber} | Teks: "${text}" | fromMe: ${isAdminAction}`);
+
+        // ================= LOGIKA ADMIN =================
         if (isAdminAction) {
             const lowerText = text.toLowerCase().replace(/\s+/g, ''); 
 
-            // 1. Perintah Admin ACC
+            // 1. Perintah Admin ACC (Contoh: siap 1)
             if (lowerText.startsWith('siap')) {
                 const indexStr = lowerText.replace('siap', '');
                 const index = indexStr ? parseInt(indexStr) - 1 : 0; 
@@ -163,7 +147,7 @@ async function startBot() {
                 return;
             }
 
-            // 2. Perintah Admin Cancel
+            // 2. Perintah Admin Cancel (Contoh: cancel 1)
             if (lowerText.startsWith('cancel')) {
                 const indexStr = lowerText.replace('cancel', '');
                 const index = indexStr ? parseInt(indexStr) - 1 : 0;
