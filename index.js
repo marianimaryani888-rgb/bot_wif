@@ -45,6 +45,7 @@ async function startBot() {
         printQRInTerminal: false
     });
 
+    // Minta Pairing Code jika belum terdaftar
     if (!sock.authState.creds.registered) {
         let phoneNumber = BOT_NUMBER;
         if (!phoneNumber) {
@@ -52,16 +53,19 @@ async function startBot() {
         }
         phoneNumber = phoneNumber.replace(/[^0-9]/g, '');
         
+        // Jeda 10 detik agar koneksi socket benar-benar siap dan stabil
         setTimeout(async () => {
             try {
-                const code = await sock.requestPairingCode(phoneNumber);
-                console.log(`\n==================================================`);
-                console.log(`🔑 KODE PAIRING WHATSAPP KAMU: ${code?.match(/.{1,4}/g)?.join('-') || code}`);
-                console.log(`==================================================\n`);
+                if (!sock.authState.creds.registered) {
+                    const code = await sock.requestPairingCode(phoneNumber);
+                    console.log(`\n==================================================`);
+                    console.log(`🔑 KODE PAIRING WHATSAPP KAMU: ${code?.match(/.{1,4}/g)?.join('-') || code}`);
+                    console.log(`==================================================\n`);
+                }
             } catch (err) {
                 console.error('Gagal meminta kode pairing:', err);
             }
-        }, 5000);
+        }, 10000);
     }
 
     sock.ev.on('creds.update', saveCreds);
