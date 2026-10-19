@@ -188,10 +188,14 @@ async function startBot() {
         }
 
         // ================= LOGIKA PEMBELI =================
-        // Ekstraksi Nomor Pelanggan Murni dari JID Chat Pembeli
-        let senderNumber = from ? from.replace(/[^0-9]/g, '') : '';
-        if (senderNumber.length < 10) {
-            senderNumber = m.pushName || 'Pelanggan';
+        let senderNumber = '';
+        if (from.endsWith('@lid')) {
+            senderNumber = m.pushName || 'Pelanggan (@lid)';
+        } else {
+            senderNumber = from ? from.replace(/[^0-9]/g, '') : '';
+            if (senderNumber.length < 10) {
+                senderNumber = m.pushName || 'Pelanggan';
+            }
         }
 
         if (text.toLowerCase() === 'menu' || text.toLowerCase() === 'ping' || text === '0' || text.toLowerCase() === 'beli' || text.toLowerCase() === 'pesan') {
@@ -257,9 +261,11 @@ async function startBot() {
                 });
             }
 
+            const formatPembeliInfo = from.endsWith('@lid') ? `Nama/LID: ${senderNumber}` : `wa.me/${senderNumber}`;
+
             const pesanAdmin = `📩 *NOTIFIKASI TAGIHAN BARU*\n\n` +
                 `Nomor Antrean: *#${nomorAntrean}*\n` +
-                `Pembeli: wa.me/${senderNumber}\n` +
+                `Pembeli: ${formatPembeliInfo}\n` +
                 `Paket: ${namaPaket}\n` +
                 `Status: Menunggu Pembayaran & Bukti Transfer\n\n` +
                 `Perintah Admin:\n` +
