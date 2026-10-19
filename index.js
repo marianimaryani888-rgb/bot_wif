@@ -8,21 +8,27 @@ const pino = require('pino');
 const readline = require('readline');
 
 // ==========================================
-// KONFIGURASI BOT
+// KONFIGURASI BOT & HARGA VOUCHER SUPER WIFI
 // ==========================================
-// 1. Ganti dengan nomor WhatsApp Admin (format: 628xxx@s.whatsapp.net)
 const ADMIN_JID = '6283133882711@s.whatsapp.net'; 
+const BOT_NUMBER = '6283133882711'; // Nomor Bot WhatsApp kamu
 
-// 2. Nomor HP WhatsApp Bot untuk menerima Pairing Code (Format 62)
-const BOT_NUMBER = '6283133882711'; // <-- ISI / SESUAIKAN DENGAN NOMOR BOT KAMU!
-
-// 3. Stok Kode Voucher Wi-Fi
+// Stok Kode Voucher Wi-Fi Sesuai Paket
 const stokVoucher = {
-    '1': ['3JAM-ABC12', '3JAM-XYZ34', '3JAM-KLM56'], // Paket 3 Jam (Rp 2.000)
-    '2': ['24JAM-QWE78', '24JAM-RTY90', '24JAM-UIO12']  // Paket 24 Jam (Rp 5.000)
+    '1': ['3JAM-ABC12', '3JAM-XYZ34'], // Paket 3 Jam - Rp 1.000
+    '2': ['7JAM-QWE78', '7JAM-RTY90'], // Paket 7 Jam - Rp 2.000
+    '3': ['10JAM-UIO12', '10JAM-PAS34'],// Paket 10 Jam - Rp 3.000
+    '4': ['36JAM-ZXC56', '36JAM-VBN78'] // Paket 36 Jam - Rp 5.000
 };
 
-// 4. Penyimpanan Transaksi Sementara
+// Pemetaan File Gambar QRIS Sesuai Paket
+const qrisGambar = {
+    '1': './qris1.jpeg',
+    '2': './qris2.jpeg',
+    '3': './qris3.jpeg',
+    '4': './qris4.jpeg'
+};
+
 const transaksiPending = {};
 
 const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
@@ -34,12 +40,11 @@ async function startBot() {
 
     const sock = makeWASocket({
         version,
-        logger: pino({ level: 'silent' }), // Mengurangi spam log agar kode pairing kelihatan jelas
+        logger: pino({ level: 'silent' }),
         auth: state,
-        printQRInTerminal: false // Matikan QR Code
+        printQRInTerminal: false
     });
 
-    // Minta Kode Pairing dengan jeda waktu stabil 5 detik
     if (!sock.authState.creds.registered) {
         let phoneNumber = BOT_NUMBER;
         if (!phoneNumber) {
@@ -56,12 +61,11 @@ async function startBot() {
             } catch (err) {
                 console.error('Gagal meminta kode pairing:', err);
             }
-        }, 5000); // Jeda 5 detik agar koneksi siap
+        }, 5000);
     }
 
     sock.ev.on('creds.update', saveCreds);
 
-    // Menangani Update Koneksi
     sock.ev.on('connection.update', (update) => {
         const { connection, lastDisconnect } = update;
 
@@ -70,7 +74,7 @@ async function startBot() {
             console.log('Koneksi terputus. Mencoba menghubungkan kembali...', shouldReconnect);
             if (shouldReconnect) startBot();
         } else if (connection === 'open') {
-            console.log('✅ Bot WhatsApp Penjualan Wi-Fi Siap Digunakan!');
+            console.log('✅ Bot Super Wifi Siap Digunakan!');
         }
     });
 
@@ -86,33 +90,39 @@ async function startBot() {
 
             // Menu Utama
             if (text.toLowerCase() === 'menu' || text.toLowerCase() === 'ping' || text === '0') {
-                const menuText = `=== 📶 BOT VOUCHER WI-FI ===\n\n` +
-                    `Silakan pilih paket voucher:\n` +
-                    `1. Paket 3 Jam - Rp 2.000\n` +
-                    `2. Paket 24 Jam - Rp 5.000\n\n` +
-                    `Balas dengan angka *1* atau *2* untuk membeli.`;
+                const menuText = `=== 📶 SUPER WIFI - LOGIN ===\n\n` +
+                    `Silakan pilih paket internet wifi:\n` +
+                    `1. Paket 3 Jam - Rp 1.000\n` +
+                    `2. Paket 7 Jam - Rp 2.000\n` +
+                    `3. Paket 10 Jam - Rp 3.000\n` +
+                    `4. Paket 36 Jam - Rp 5.000\n\n` +
+                    `Balas dengan angka *1*, *2*, *3*, atau *4* untuk membeli.`;
                 await sock.sendMessage(from, { text: menuText });
             }
 
-            // Pilihan Paket 1 atau 2
-            else if (text === '1' || text === '2') {
-                const namaPaket = text === '1' ? 'Paket 3 Jam (Rp 2.000)' : 'Paket 24 Jam (Rp 5.000)';
+            // Pilihan Paket 1 sampai 4
+            else if (['1', '2', '3', '4'].includes(text)) {
+                const daftarPaket = {
+                    '1': 'Paket 3 Jam (Rp 1.000)',
+                    '2': 'Paket 7 Jam (Rp 2.000)',
+                    '3': 'Paket 10 Jam (Rp 3.000)',
+                    '4': 'Paket 36 Jam (Rp 5.000)'
+                };
+                const namaPaket = daftarPaket[text];
                 
-                // Simpan transaksi pending
                 transaksiPending[from] = { paket: text, timestamp: Date.now() };
 
-                // Kirim QRIS Gambar jika ada, atau pesan instruksi
                 try {
                     await sock.sendMessage(from, {
-                        image: { url: './qris.jpeg' },
+                        image: { url: qrisGambar[text] },
                         caption: `Pembelian *${namaPaket}*\n\n` +
-                            `Silakan scan QRIS DANA di atas untuk melakukan pembayaran.\n\n` +
-                            `Setelah transfer, ketik *!bayar* untuk konfirmasi pembayaran.`
+                            `Silakan scan QRIS di atas untuk pembayaran paket ini.\n\n` +
+                            `Setelah transfer, ketik *!bayar* untuk konfirmasi.`
                     });
                 } catch (e) {
                     await sock.sendMessage(from, {
                         text: `Pembelian *${namaPaket}*\n\n` +
-                            `Silakan transfer ke QRIS DANA kami.\n\n` +
+                            `Silakan transfer ke QRIS kami.\n\n` +
                             `Setelah transfer, ketik *!bayar* untuk konfirmasi.`
                     });
                 }
@@ -126,24 +136,28 @@ async function startBot() {
                 }
 
                 const trx = transaksiPending[from];
-                const namaPaket = trx.paket === '1' ? '3 Jam (Rp 2.000)' : '24 Jam (Rp 5.000)';
+                const daftarHargaNama = { 
+                    '1': '3 Jam (Rp 1.000)', 
+                    '2': '7 Jam (Rp 2.000)', 
+                    '3': '10 Jam (Rp 3.000)', 
+                    '4': '36 Jam (Rp 5.000)' 
+                };
+                const namaPaket = daftarHargaNama[trx.paket];
 
-                // Notifikasi ke Admin via WA
-                const pesanAdmin = `📩 *NOTIFIKASI PEMBAYARAN MASUK*\n\n` +
+                const pesanAdmin = `📩 *NOTIFIKASI PEMBAYARAN SUPER WIFI*\n\n` +
                     `Pembeli: wa.me/${from.split('@')[0]}\n` +
                     `Paket: ${namaPaket}\n\n` +
-                    `Cek saldo DANA Anda. Jika sudah masuk, ketik perintah berikut untuk ACC:\n` +
+                    `Cek saldo. Jika sudah masuk, ketik perintah berikut untuk ACC:\n` +
                     `*!acc ${from.split('@')[0]} ${trx.paket}*`;
 
                 await sock.sendMessage(ADMIN_JID, { text: pesanAdmin });
 
-                // Balasan ke Pembeli
                 await sock.sendMessage(from, {
-                    text: `Pembayaran Anda sedang diverifikasi oleh Admin.\nMohon tunggu sejenak, kode voucher akan dikirim secara otomatis setelah diverifikasi.`
+                    text: `Pembayaran Anda sedang diverifikasi oleh Admin.\nMohon tunggu sejenak, kode voucher akan dikirim otomatis setelah diverifikasi.`
                 });
             }
 
-            // Perintah Admin untuk ACC (!acc <nomor_pembeli> <kode_paket>)
+            // Perintah Admin untuk ACC (!acc <nomor> <paket>)
             else if (text.startsWith('!acc') && from === ADMIN_JID) {
                 const args = text.split(' ');
                 if (args.length < 3) {
@@ -155,23 +169,19 @@ async function startBot() {
                 const paketId = args[2];
 
                 if (stokVoucher[paketId] && stokVoucher[paketId].length > 0) {
-                    // Ambil voucher paling atas dan hapus dari stok
                     const kodeVoucher = stokVoucher[paketId].shift();
 
-                    // Kirim Voucher ke Pembeli
                     await sock.sendMessage(targetNum, {
                         text: `🎉 *PEMBAYARAN DITERIMA!*\n\n` +
-                            `Berikut adalah Kode Voucher Wi-Fi Anda:\n` +
+                            `Berikut adalah Kode Voucher Super Wifi Anda:\n` +
                             `🔑 Kode: *${kodeVoucher}*\n\n` +
-                            `Terima kasih telah membeli!`
+                            `Silakan masukkan kode tersebut di halaman login Wi-Fi. Terima kasih!`
                     });
 
-                    // Konfirmasi ke Admin
                     await sock.sendMessage(from, { 
-                        text: `✅ Berhasil mengirim voucher *${kodeVoucher}* ke ${args[1]}. Stok tersisa: ${stokVoucher[paketId].length}` 
+                        text: `✅ Berhasil mengirim voucher *${kodeVoucher}* ke ${args[1]}. Sisa stok: ${stokVoucher[paketId].length}` 
                     });
 
-                    // Hapus transaksi pending pembeli
                     delete transaksiPending[targetNum];
                 } else {
                     await sock.sendMessage(from, { text: `⚠️ Stok voucher paket ${paketId} HABIS!` });
