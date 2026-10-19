@@ -7,6 +7,7 @@ const {
 } = require('@whiskeysockets/baileys');
 const pino = require('pino');
 const readline = require('readline');
+const fs = require('fs');
 
 // ==========================================
 // KONFIGURASI BOT & HARGA VOUCHER SUPER WIFI
@@ -46,6 +47,7 @@ async function startBot() {
         printQRInTerminal: false
     });
 
+    // Minta Pairing Code jika belum terdaftar
     if (!sock.authState.creds.registered) {
         let phoneNumber = BOT_NUMBER;
         if (!phoneNumber) {
@@ -73,9 +75,19 @@ async function startBot() {
         const { connection, lastDisconnect } = update;
 
         if (connection === 'close') {
-            const shouldReconnect = (lastDisconnect?.error)?.output?.statusCode !== DisconnectReason.loggedOut;
-            console.log('Koneksi terputus. Mencoba menghubungkan kembali...', shouldReconnect);
-            if (shouldReconnect) startBot();
+            const statusCode = (lastDisconnect?.error)?.output?.statusCode;
+            const shouldReconnect = statusCode !== DisconnectReason.loggedOut;
+            console.log('Koneksi terputus. Status code:', statusCode, '| Reconnect:', shouldReconnect);
+
+            if (shouldReconnect) {
+                startBot();
+            } else {
+                console.log('Sesi terputus/Logged Out. Menghapus auth lama dan restart...');
+                if (fs.existsSync('auth_info_baileys')) {
+                    fs.rmSync('auth_info_baileys', { recursive: true, force: true });
+                }
+                startBot();
+            }
         } else if (connection === 'open') {
             console.log('✅ Bot Super Wifi Siap Digunakan!');
         }
@@ -162,7 +174,7 @@ async function startBot() {
                     `ID Pembeli: ${from}\n\n` +
                     `💡 *CARA ACC CEPAT:*\n` +
                     `Reply / Balas foto ini lalu ketik:\n` +
-                    `*!acc ${trx.paket}* (atau format lama: *!acc <nomor> <paket>*)`;
+                    `*!acc ${trx.paket}* (atau format manual: *!acc <nomor> <paket>*)`;
 
                 await sock.sendMessage(ADMIN_JID, { 
                     image: buffer, 
@@ -180,7 +192,7 @@ async function startBot() {
                 let targetNum = '';
                 let paketId = '';
 
-                // Opsi A: Admin Reply pesan notifikasi dan cuma ketik `!acc <paket>` (contoh: !acc 1)
+                // Opsi A: Admin Reply foto notifikasi dan cuma ketik `!acc <paket>` (contoh: !acc 1)
                 const quotedMsg = msg.message.extendedTextMessage?.contextInfo?.quotedMessage;
                 if (quotedMsg && args.length === 2) {
                     paketId = args[1];
@@ -212,21 +224,4 @@ async function startBot() {
                     });
 
                     await sock.sendMessage(from, { 
-                        text: `✅ Berhasil mengirim voucher *${kodeVoucher}* ke ${targetNum.split('@')[0]}. Sisa stok: ${stokVoucher[paketId].length}` 
-                    });
-
-                    delete transaksiPending[targetNum];
-                } else {
-                    await sock.sendMessage(from, { text: `⚠️ Stok voucher paket ${paketId} HABIS!` });
-                }
-            }
-
-            // 5. Default Chat Random (Teks)
-            else if (from !== ADMIN_JID) {
-                await sock.sendMessage(from, { text: 'Silahkan ketik *beli* atau *pesan* untuk lanjut beli voucher.' });
-            }
-        }
-    });
-}
-
-startBot();
+                        text: `✅ Berhasil mengirim voucher *${kodeVoucher}* ke ${targetNum.split('@')[0]}. Sisa stok: ${stokVoucher[paketId].length}`
