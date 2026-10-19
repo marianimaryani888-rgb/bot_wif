@@ -84,7 +84,32 @@ async function startBot() {
         const text = body.trim();
         const isAdminAction = m.key.fromMe;
 
-        console.log(`[LOG] Dari JID: ${from} | Teks: "${text}" | fromMe: ${isAdminAction}`);
+        // ==========================================
+        // EKSTRAKSI NOMOR TELEPON ASLI PELANGGAN
+        // ==========================================
+        let rawJid = '';
+
+        // 1. Cek dari remoteJidAlt (biasanya berisi nomor HP asli jika remoteJid berupa LID)
+        if (m.key.remoteJidAlt && m.key.remoteJidAlt.includes('@s.whatsapp.net')) {
+            rawJid = m.key.remoteJidAlt;
+        } 
+        // 2. Cek dari participant
+        else if (m.key.participant && m.key.participant.includes('@s.whatsapp.net')) {
+            rawJid = m.key.participant;
+        }
+        // 3. Cek dari sender
+        else if (m.sender && m.sender.includes('@s.whatsapp.net')) {
+            rawJid = m.sender;
+        }
+        // 4. Jika dari berupa nomor biasa
+        else if (from && from.includes('@s.whatsapp.net')) {
+            rawJid = from;
+        }
+
+        // Ambil murni angkanya saja
+        let senderNumber = rawJid ? rawJid.replace(/[^0-9]/g, '') : '';
+
+        console.log(`[LOG] Dari JID: ${from} | Nomor HP Asli Terdeteksi: ${senderNumber || 'Tidak Ditemukan'} | Teks: "${text}" | fromMe: ${isAdminAction}`);
 
         // ================= LOGIKA ADMIN =================
         if (isAdminAction) {
@@ -188,18 +213,6 @@ async function startBot() {
         }
 
         // ================= LOGIKA PEMBELI =================
-        // Menangani format @lid atau nomor biasa agar tidak kosong
-        let senderNumber = '';
-        if (from.endsWith('@lid')) {
-            // Jika terbaca LID, kita coba ambil dari pushName atau tampilkan info LID-nya
-            senderNumber = m.pushName ? `${m.pushName} (LID)` : `Pengguna LID (${from.split('@')[0]})`;
-        } else {
-            senderNumber = from ? from.replace(/[^0-9]/g, '') : '';
-            if (senderNumber.length < 10) {
-                senderNumber = m.pushName || 'Pelanggan';
-            }
-        }
-
         if (text.toLowerCase() === 'menu' || text.toLowerCase() === 'ping' || text === '0' || text.toLowerCase() === 'beli' || text.toLowerCase() === 'pesan') {
             const menuText = `=== 📶 SUPER WIFI - LOGIN ===\n\n` +
                 `Silakan pilih paket internet wifi:\n` +
@@ -263,12 +276,13 @@ async function startBot() {
                 });
             }
 
-            // Format penulisan pembeli agar aman jika menggunakan LID ataupun nomor biasa
-            const formatPembeli = from.endsWith('@lid') ? senderNumber : `wa.me/${senderNumber}`;
+            // Jika nomor HP asli ditemukan, buatkan link wa.me/
+            // Jika tidak ada (karena kebijakan privacy WhatsApp penuh), gunakan nama profile
+            const infoPembeli = senderNumber ? `wa.me/${senderNumber}` : (m.pushName || 'Pelanggan');
 
             const pesanAdmin = `📩 *NOTIFIKASI TAGIHAN BARU*\n\n` +
                 `Nomor Antrean: *#${nomorAntrean}*\n` +
-                `Pembeli: ${formatPembeli}\n` +
+                `Pembeli: ${infoPembeli}\n` +
                 `Paket: ${namaPaket}\n` +
                 `Status: Menunggu Pembayaran & Bukti Transfer\n\n` +
                 `Perintah Admin:\n` +
