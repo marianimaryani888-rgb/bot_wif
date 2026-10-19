@@ -5,7 +5,7 @@ const {
     fetchLatestBaileysVersion
 } = require('@whiskeysockets/baileys');
 const pino = require('pino');
-const qrcode = require('qrcode-terminal');
+const readline = require('readline');
 
 // ==========================================
 // KONFIGURASI BOT
@@ -13,14 +13,20 @@ const qrcode = require('qrcode-terminal');
 // 1. Ganti dengan nomor WhatsApp Admin (format: 628xxx@s.whatsapp.net)
 const ADMIN_JID = '6283133882711@s.whatsapp.net'; 
 
-// 2. Stok Kode Voucher Wi-Fi
+// 2. Nomor HP WhatsApp Bot untuk menerima Pairing Code (Format 62, contoh: '628123456789')
+const BOT_NUMBER = '6283133882711'; // <-- ISI / SESUAIKAN DENGAN NOMOR BOT KAMU!
+
+// 3. Stok Kode Voucher Wi-Fi
 const stokVoucher = {
     '1': ['3JAM-ABC12', '3JAM-XYZ34', '3JAM-KLM56'], // Paket 3 Jam (Rp 2.000)
     '2': ['24JAM-QWE78', '24JAM-RTY90', '24JAM-UIO12']  // Paket 24 Jam (Rp 5.000)
 };
 
-// 3. Penyimpanan Transaksi Sementara
+// 4. Penyimpanan Transaksi Sementara
 const transaksiPending = {};
+
+const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+const question = (text) => new Promise((resolve) => rl.question(text, resolve));
 
 async function startBot() {
     const { state, saveCreds } = await useMultiFileAuthState('auth_info_baileys');
@@ -28,27 +34,43 @@ async function startBot() {
 
     const sock = makeWASocket({
         version,
-        logger: pino({ level: 'info' }),
-        auth: state
+        logger: pino({ level: 'silent' }), // Mengurangi spam log agar kode pairing kelihatan jelas
+        auth: state,
+        printQRInTerminal: false // Matikan QR Code agar tidak pakai kamera
     });
+
+    // Minta Kode Pairing jika belum login
+    if (!sock.authState.creds.registered) {
+        let phoneNumber = BOT_NUMBER;
+        if (!phoneNumber) {
+            phoneNumber = await question('Masukkan nomor WhatsApp Bot Anda (Contoh 628xxx): ');
+        }
+        phoneNumber = phoneNumber.replace(/[^0-9]/g, '');
+        
+        setTimeout(async () => {
+            try {
+                const code = await sock.requestPairingCode(phoneNumber);
+                console.log(`\n==================================================`);
+                console.log(`🔑 KODE PAIRING WHATSAPP KAMU: ${code?.match(/.{1,4}/g)?.join('-') || code}`);
+                console.log(`==================================================\n`);
+            } catch (err) {
+                console.error('Gagal meminta kode pairing:', err);
+            }
+        }, 3000);
+    }
 
     sock.ev.on('creds.update', saveCreds);
 
-    // Menangani Update Koneksi & Menampilkan QR Code di Terminal
+    // Menangani Update Koneksi
     sock.ev.on('connection.update', (update) => {
-        const { connection, lastDisconnect, qr } = update;
-
-        if (qr) {
-            console.log('📱 Scan QR Code di bawah ini menggunakan WhatsApp Anda:');
-            qrcode.generate(qr, { small: true });
-        }
+        const { connection, lastDisconnect } = update;
 
         if (connection === 'close') {
-            const shouldReconnect = (lastDisconnect.error)?.output?.statusCode !== DisconnectReason.loggedOut;
+            const shouldReconnect = (lastDisconnect?.error)?.output?.statusCode !== DisconnectReason.loggedOut;
             console.log('Koneksi terputus. Mencoba menghubungkan kembali...', shouldReconnect);
             if (shouldReconnect) startBot();
         } else if (connection === 'open') {
-            console.log('✅ Bot WhatsApp Penjualan Wi-Fi Siap Gunakan!');
+            console.log('✅ Bot WhatsApp Penjualan Wi-Fi Siap Digunakan!');
         }
     });
 
@@ -83,13 +105,13 @@ async function startBot() {
                 try {
                     await sock.sendMessage(from, {
                         image: { url: './qris.jpeg' },
-                        caption: ` Pembelian *${namaPaket}*\n\n` +
+                        caption: `Pembelian *${namaPaket}*\n\n` +
                             `Silakan scan QRIS DANA di atas untuk melakukan pembayaran.\n\n` +
                             `Setelah transfer, ketik *!bayar* untuk konfirmasi pembayaran.`
                     });
                 } catch (e) {
                     await sock.sendMessage(from, {
-                        text: ` Pembelian *${namaPaket}*\n\n` +
+                        text: `Pembelian *${namaPaket}*\n\n` +
                             `Silakan transfer ke QRIS DANA kami.\n\n` +
                             `Setelah transfer, ketik *!bayar* untuk konfirmasi.`
                     });
@@ -117,7 +139,7 @@ async function startBot() {
 
                 // Balasan ke Pembeli
                 await sock.sendMessage(from, {
-                    text: ` Pembayaran Anda sedang diverifikasi oleh Admin.\nMohon tunggu sejenak, kode voucher akan dikirim secara otomatis setelah diverifikasi.`
+                    text: `Pembayaran Anda sedang diverifikasi oleh Admin.\nMohon tunggu sejenak, kode voucher akan dikirim secara otomatis setelah diverifikasi.`
                 });
             }
 
