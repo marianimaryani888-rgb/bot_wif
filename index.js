@@ -15,10 +15,10 @@ const BOT_NUMBER = '6283133882711';
 
 // Stok Kode Voucher Wi-Fi Sesuai Paket
 const stokVoucher = {
-    '1': ['3JAM-ABC12', '3JAM-XYZ34'],
-    '2': ['7JAM-QWE78', '7JAM-RTY90'],
-    '3': ['10JAM-UIO12', '10JAM-PAS34'],
-    '4': ['36JAM-ZXC56', '36JAM-VBN78']
+    '1': ['3JAM-ABC12', '3JAM-XYZ34', '3JAM-DEF56', '3JAM-GHI78', '3JAM-JKL90'],
+    '2': ['7JAM-QWE78', '7JAM-RTY90', '7JAM-UIO12', '7JAM-PAS34', '7JAM-DFG56'],
+    '3': ['10JAM-UIO12', '10JAM-PAS34', '10JAM-HJK56', '10JAM-LZX78', '10JAM-VBN90'],
+    '4': ['36JAM-ZXC56', '36JAM-VBN78', '36JAM-MQW90', '36JAM-ERT12', '36JAM-TYU34']
 };
 
 const qrisGambar = {
