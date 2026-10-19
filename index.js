@@ -92,7 +92,7 @@ async function startBot() {
             const body = msg.message.conversation || msg.message.extendedTextMessage?.text || '';
             const text = body.trim();
 
-            // Cek jika perintah untuk melihat menu
+            // Cek jika perintah untuk melihat menu / mulai beli
             if (text.toLowerCase() === 'menu' || text.toLowerCase() === 'ping' || text === '0' || text.toLowerCase() === 'beli' || text.toLowerCase() === 'pesan') {
                 const menuText = `=== 📶 SUPER WIFI - LOGIN ===\n\n` +
                     `Silakan pilih paket internet wifi:\n` +
@@ -104,7 +104,7 @@ async function startBot() {
                 await sock.sendMessage(from, { text: menuText });
             }
 
-            // Jika chat random / selain perintah di atas dan belum punya transaksi aktif
+            // Jika chat random / kapan saja dan belum punya transaksi aktif
             else if (!['1', '2', '3', '4'].includes(text) && text.toLowerCase() !== 'siap' && !transaksiPending[from]) {
                 await sock.sendMessage(from, { 
                     text: `Halo! Selamat datang di *Super Wifi*.\n\nSilakan ketik *beli* atau *pesan* untuk melanjutkan pembelian paket internet.` 
@@ -126,12 +126,12 @@ async function startBot() {
                     clearTimeout(transaksiPending[from].timeout);
                 }
 
-                // Timer tetap berjalan di backend selama 5 menit untuk pembatalan otomatis
+                // Timer backend 5 menit untuk pembatalan otomatis jika tidak diproses
                 const timeoutId = setTimeout(async () => {
                     if (transaksiPending[from]) {
                         delete transaksiPending[from];
                         await sock.sendMessage(from, { 
-                            text: `⚠️ Waktu pembayaran telah habis.\nTransaksi untuk *${namaPaket}* dibatalkan otomatis.\n\nKetik *pesan* jika ingin memesan ulang.` 
+                            text: `⚠️ Waktu transaksi telah habis.\nPesanan untuk *${namaPaket}* dibatalkan otomatis.\n\nKetik *pesan* jika ingin memesan ulang.` 
                         });
                     }
                 }, 5 * 60 * 1000);
@@ -143,7 +143,7 @@ async function startBot() {
                     timeout: timeoutId 
                 };
 
-                // Kirim QRIS dan instruksi ke pembeli (tanpa teks waktu)
+                // Kirim QRIS dan instruksi ke pembeli
                 try {
                     await sock.sendMessage(from, {
                         image: { url: qrisGambar[text] },
@@ -166,14 +166,14 @@ async function startBot() {
                     `Pembeli: wa.me/${from.split('@')[0]}\n` +
                     `Paket: ${namaPaket}\n` +
                     `Status: Menunggu Pembayaran & Bukti Transfer\n\n` +
-                    `Jika sudah dicek dan sesuai, cukup ketik:\n*siap*`;
+                    `Jika sudah dicek bukti transfernya, cukup ketik:\n*siap*`;
 
                 await sock.sendMessage(ADMIN_JID, { text: pesanAdmin });
             }
 
             // Perintah Admin untuk ACC cukup ketik "siap"
             else if (text.toLowerCase() === 'siap' && from === ADMIN_JID) {
-                // Ambil daftar transaksi pending yang ada (diurutkan berdasarkan yang paling awal masuk/FIFO)
+                // Ambil daftar transaksi pending (diurutkan FIFO / yang paling awal masuk)
                 const listPending = Object.values(transaksiPending);
 
                 if (listPending.length === 0) {
@@ -181,7 +181,6 @@ async function startBot() {
                     continue;
                 }
 
-                // Ambil transaksi terlama yang sedang menunggu
                 listPending.sort((a, b) => a.timestamp - b.timestamp);
                 const currentTrx = listPending[0];
                 const targetNum = currentTrx.jId;
