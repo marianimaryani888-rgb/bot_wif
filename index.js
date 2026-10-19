@@ -10,7 +10,7 @@ const readline = require('readline');
 // ==========================================
 // KONFIGURASI BOT & HARGA VOUCHER SUPER WIFI
 // ==========================================
-const ADMIN_NUMBER = '6283133882711'; // Cukup masukkan nomor HP saja tanpa @s.whatsapp.net
+const ADMIN_NUMBER = '6283133882711'; // Nomor WhatsApp Admin
 const BOT_NUMBER = '6283133882711'; // Nomor Bot WhatsApp kamu
 
 // Stok Kode Voucher Wi-Fi Sesuai Paket
@@ -85,12 +85,16 @@ async function startBot() {
         if (type !== 'notify') return;
 
         for (const msg of messages) {
-            if (!msg.message || msg.key.fromMe) continue;
+            if (!msg.message) continue;
 
             const from = msg.key.remoteJid;
             const senderNumber = from.split('@')[0];
             const body = msg.message.conversation || msg.message.extendedTextMessage?.text || '';
             const text = body.trim();
+
+            // Jika pesan dikirim oleh bot sendiri ke chat lain, abaikan
+            // TAPI jika pesan dikirim dari nomor admin (walaupun dari perangkat kita sendiri), izinkan dibaca
+            if (msg.key.fromMe && senderNumber !== ADMIN_NUMBER) continue;
 
             console.log(`[PESAN MASUK] Dari: ${senderNumber} | Teks: "${text}"`);
 
@@ -122,6 +126,7 @@ async function startBot() {
                 if (stokVoucher[paketId] && stokVoucher[paketId].length > 0) {
                     const kodeVoucher = stokVoucher[paketId].shift();
 
+                    // Kirim voucher ke pembeli
                     await sock.sendMessage(targetNum, {
                         text: `🎉 *PEMBAYARAN DITERIMA!*\n\n` +
                             `Berikut adalah Kode Voucher Super Wifi Anda:\n` +
@@ -129,6 +134,7 @@ async function startBot() {
                             `Silakan masukkan kode tersebut di halaman login Wi-Fi. Terima kasih!`
                     });
 
+                    // Konfirmasi ke admin
                     await sock.sendMessage(from, { 
                         text: `✅ Berhasil ACC pesanan *${namaPaket}* untuk ${targetNum.split('@')[0]}\nKode terkirim: *${kodeVoucher}*\nSisa stok: ${stokVoucher[paketId].length}` 
                     });
@@ -163,10 +169,9 @@ async function startBot() {
                 };
                 const namaPaket = daftarHargaNama[paketId];
 
-                // Beritahu pembeli bahwa transaksi dibatalkan oleh admin
                 await sock.sendMessage(targetNum, {
                     text: `❌ *TRANSAKSI DIBATALKAN*\n\n` +
-                        `Mohon maaf, transaksi untuk *${namaPaket}* dibatalkan oleh Admin (kemungkinan bukti transfer tidak valid / nominal tidak sesuai).\n\n` +
+                        `Mohon maaf, transaksi untuk *${namaPaket}* dibatalkan oleh Admin.\n\n` +
                         `Silakan ketik *pesan* jika ingin memesan ulang.`
                 });
 
