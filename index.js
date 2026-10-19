@@ -13,7 +13,7 @@ const readline = require('readline');
 // 1. Ganti dengan nomor WhatsApp Admin (format: 628xxx@s.whatsapp.net)
 const ADMIN_JID = '6283133882711@s.whatsapp.net'; 
 
-// 2. Nomor HP WhatsApp Bot untuk menerima Pairing Code (Format 62, contoh: '628123456789')
+// 2. Nomor HP WhatsApp Bot untuk menerima Pairing Code (Format 62)
 const BOT_NUMBER = '6283133882711'; // <-- ISI / SESUAIKAN DENGAN NOMOR BOT KAMU!
 
 // 3. Stok Kode Voucher Wi-Fi
@@ -36,10 +36,10 @@ async function startBot() {
         version,
         logger: pino({ level: 'silent' }), // Mengurangi spam log agar kode pairing kelihatan jelas
         auth: state,
-        printQRInTerminal: false // Matikan QR Code agar tidak pakai kamera
+        printQRInTerminal: false // Matikan QR Code
     });
 
-    // Minta Kode Pairing jika belum login
+    // Minta Kode Pairing dengan jeda waktu stabil 5 detik
     if (!sock.authState.creds.registered) {
         let phoneNumber = BOT_NUMBER;
         if (!phoneNumber) {
@@ -56,7 +56,7 @@ async function startBot() {
             } catch (err) {
                 console.error('Gagal meminta kode pairing:', err);
             }
-        }, 3000);
+        }, 5000); // Jeda 5 detik agar koneksi siap
     }
 
     sock.ev.on('creds.update', saveCreds);
