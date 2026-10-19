@@ -53,7 +53,7 @@ async function startBot() {
         }
         phoneNumber = phoneNumber.replace(/[^0-9]/g, '');
         
-        // Jeda 10 detik agar koneksi socket benar-benar siap dan stabil
+        // Jeda 15 detik agar koneksi socket benar-benar stabil di server cloud
         setTimeout(async () => {
             try {
                 if (!sock.authState.creds.registered) {
@@ -65,7 +65,7 @@ async function startBot() {
             } catch (err) {
                 console.error('Gagal meminta kode pairing:', err);
             }
-        }, 10000);
+        }, 15000);
     }
 
     sock.ev.on('creds.update', saveCreds);
