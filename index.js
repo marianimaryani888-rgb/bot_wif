@@ -188,9 +188,11 @@ async function startBot() {
         }
 
         // ================= LOGIKA PEMBELI =================
+        // Menangani format @lid atau nomor biasa agar tidak kosong
         let senderNumber = '';
         if (from.endsWith('@lid')) {
-            senderNumber = m.pushName || 'Pelanggan (@lid)';
+            // Jika terbaca LID, kita coba ambil dari pushName atau tampilkan info LID-nya
+            senderNumber = m.pushName ? `${m.pushName} (LID)` : `Pengguna LID (${from.split('@')[0]})`;
         } else {
             senderNumber = from ? from.replace(/[^0-9]/g, '') : '';
             if (senderNumber.length < 10) {
@@ -261,11 +263,12 @@ async function startBot() {
                 });
             }
 
-            const formatPembeliInfo = from.endsWith('@lid') ? `Nama/LID: ${senderNumber}` : `wa.me/${senderNumber}`;
+            // Format penulisan pembeli agar aman jika menggunakan LID ataupun nomor biasa
+            const formatPembeli = from.endsWith('@lid') ? senderNumber : `wa.me/${senderNumber}`;
 
             const pesanAdmin = `📩 *NOTIFIKASI TAGIHAN BARU*\n\n` +
                 `Nomor Antrean: *#${nomorAntrean}*\n` +
-                `Pembeli: ${formatPembeliInfo}\n` +
+                `Pembeli: ${formatPembeli}\n` +
                 `Paket: ${namaPaket}\n` +
                 `Status: Menunggu Pembayaran & Bukti Transfer\n\n` +
                 `Perintah Admin:\n` +
