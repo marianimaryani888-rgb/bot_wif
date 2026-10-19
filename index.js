@@ -92,8 +92,8 @@ async function startBot() {
             const body = msg.message.conversation || msg.message.extendedTextMessage?.text || '';
             const text = body.trim();
 
-            // Menu Utama
-            if (text.toLowerCase() === 'menu' || text.toLowerCase() === 'ping' || text === '0') {
+            // Cek jika perintah untuk melihat menu
+            if (text.toLowerCase() === 'menu' || text.toLowerCase() === 'ping' || text === '0' || text.toLowerCase() === 'beli' || text.toLowerCase() === 'pesan') {
                 const menuText = `=== 📶 SUPER WIFI - LOGIN ===\n\n` +
                     `Silakan pilih paket internet wifi:\n` +
                     `1. Paket 3 Jam - Rp 1.000\n` +
@@ -102,6 +102,13 @@ async function startBot() {
                     `4. Paket 36 Jam - Rp 5.000\n\n` +
                     `Balas dengan angka *1*, *2*, *3*, atau *4* untuk membeli.`;
                 await sock.sendMessage(from, { text: menuText });
+            }
+
+            // Jika chat random / selain perintah di atas dan belum punya transaksi aktif
+            else if (!['1', '2', '3', '4'].includes(text) && text.toLowerCase() !== 'siap' && !transaksiPending[from]) {
+                await sock.sendMessage(from, { 
+                    text: `Halo! Selamat datang di *Super Wifi*.\n\nSilakan ketik *beli* atau *pesan* untuk melanjutkan pembelian paket internet.` 
+                });
             }
 
             // Pilihan Paket 1 sampai 4
@@ -114,63 +121,79 @@ async function startBot() {
                 };
                 const namaPaket = daftarPaket[text];
                 
-                transaksiPending[from] = { paket: text, timestamp: Date.now() };
+                // Jika user memesan ulang, bersihkan timer lama
+                if (transaksiPending[from]) {
+                    clearTimeout(transaksiPending[from].timeout);
+                }
 
+                // Timer tetap berjalan di backend selama 5 menit untuk pembatalan otomatis
+                const timeoutId = setTimeout(async () => {
+                    if (transaksiPending[from]) {
+                        delete transaksiPending[from];
+                        await sock.sendMessage(from, { 
+                            text: `⚠️ Waktu pembayaran telah habis.\nTransaksi untuk *${namaPaket}* dibatalkan otomatis.\n\nKetik *pesan* jika ingin memesan ulang.` 
+                        });
+                    }
+                }, 5 * 60 * 1000);
+
+                transaksiPending[from] = { 
+                    jId: from,
+                    paket: text, 
+                    timestamp: Date.now(),
+                    timeout: timeoutId 
+                };
+
+                // Kirim QRIS dan instruksi ke pembeli (tanpa teks waktu)
                 try {
                     await sock.sendMessage(from, {
                         image: { url: qrisGambar[text] },
                         caption: `Pembelian *${namaPaket}*\n\n` +
-                            `Silakan scan QRIS di atas untuk pembayaran paket ini.\n\n` +
-                            `Setelah transfer, ketik *!bayar* untuk konfirmasi.`
+                            `Silakan scan QRIS di atas untuk pembayaran.\n\n` +
+                            `📸 *Penting:* Mohon kirimkan bukti screenshot transaksi setelah membayar.\n` +
+                            `Silahkan menunggu, voucher akan dikirim otomatis oleh admin.`
                     });
                 } catch (e) {
                     await sock.sendMessage(from, {
                         text: `Pembelian *${namaPaket}*\n\n` +
                             `Silakan transfer ke QRIS kami.\n\n` +
-                            `Setelah transfer, ketik *!bayar* untuk konfirmasi.`
+                            `📸 *Penting:* Mohon kirimkan bukti screenshot transaksi setelah membayar.\n` +
+                            `Silahkan menunggu, voucher akan dikirim otomatis oleh admin.`
                     });
                 }
+
+                // Notifikasi otomatis ke Admin
+                const pesanAdmin = `📩 *NOTIFIKASI TAGIHAN BARU*\n\n` +
+                    `Pembeli: wa.me/${from.split('@')[0]}\n` +
+                    `Paket: ${namaPaket}\n` +
+                    `Status: Menunggu Pembayaran & Bukti Transfer\n\n` +
+                    `Jika sudah dicek dan sesuai, cukup ketik:\n*siap*`;
+
+                await sock.sendMessage(ADMIN_JID, { text: pesanAdmin });
             }
 
-            // Pembeli Ketik !bayar
-            else if (text.toLowerCase() === '!bayar') {
-                if (!transaksiPending[from]) {
-                    await sock.sendMessage(from, { text: '⚠️ Anda belum memilih paket. Ketik *menu* untuk melihat daftar paket.' });
+            // Perintah Admin untuk ACC cukup ketik "siap"
+            else if (text.toLowerCase() === 'siap' && from === ADMIN_JID) {
+                // Ambil daftar transaksi pending yang ada (diurutkan berdasarkan yang paling awal masuk/FIFO)
+                const listPending = Object.values(transaksiPending);
+
+                if (listPending.length === 0) {
+                    await sock.sendMessage(from, { text: '⚠️ Tidak ada transaksi pending saat ini.' });
                     continue;
                 }
 
-                const trx = transaksiPending[from];
+                // Ambil transaksi terlama yang sedang menunggu
+                listPending.sort((a, b) => a.timestamp - b.timestamp);
+                const currentTrx = listPending[0];
+                const targetNum = currentTrx.jId;
+                const paketId = currentTrx.paket;
+
                 const daftarHargaNama = { 
                     '1': '3 Jam (Rp 1.000)', 
                     '2': '7 Jam (Rp 2.000)', 
                     '3': '10 Jam (Rp 3.000)', 
                     '4': '36 Jam (Rp 5.000)' 
                 };
-                const namaPaket = daftarHargaNama[trx.paket];
-
-                const pesanAdmin = `📩 *NOTIFIKASI PEMBAYARAN SUPER WIFI*\n\n` +
-                    `Pembeli: wa.me/${from.split('@')[0]}\n` +
-                    `Paket: ${namaPaket}\n\n` +
-                    `Cek saldo. Jika sudah masuk, ketik perintah berikut untuk ACC:\n` +
-                    `*!acc ${from.split('@')[0]} ${trx.paket}*`;
-
-                await sock.sendMessage(ADMIN_JID, { text: pesanAdmin });
-
-                await sock.sendMessage(from, {
-                    text: `Pembayaran Anda sedang diverifikasi oleh Admin.\nMohon tunggu sejenak, kode voucher akan dikirim otomatis setelah diverifikasi.`
-                });
-            }
-
-            // Perintah Admin untuk ACC (!acc <nomor> <paket>)
-            else if (text.startsWith('!acc') && from === ADMIN_JID) {
-                const args = text.split(' ');
-                if (args.length < 3) {
-                    await sock.sendMessage(from, { text: 'Format salah! Gunakan: !acc <nomor> <paket>' });
-                    continue;
-                }
-
-                const targetNum = args[1] + '@s.whatsapp.net';
-                const paketId = args[2];
+                const namaPaket = daftarHargaNama[paketId];
 
                 if (stokVoucher[paketId] && stokVoucher[paketId].length > 0) {
                     const kodeVoucher = stokVoucher[paketId].shift();
@@ -183,12 +206,14 @@ async function startBot() {
                     });
 
                     await sock.sendMessage(from, { 
-                        text: `✅ Berhasil mengirim voucher *${kodeVoucher}* ke ${args[1]}. Sisa stok: ${stokVoucher[paketId].length}` 
+                        text: `✅ Berhasil ACC pesanan *${namaPaket}* untuk ${targetNum.split('@')[0]}\nKode terkirim: *${kodeVoucher}*\nSisa stok: ${stokVoucher[paketId].length}` 
                     });
 
+                    // Bersihkan timer dan hapus dari transaksi pending
+                    clearTimeout(currentTrx.timeout);
                     delete transaksiPending[targetNum];
                 } else {
-                    await sock.sendMessage(from, { text: `⚠️ Stok voucher paket ${paketId} HABIS!` });
+                    await sock.sendMessage(from, { text: `⚠️ Stok voucher untuk paket ${namaPaket} HABIS!` });
                 }
             }
         }
