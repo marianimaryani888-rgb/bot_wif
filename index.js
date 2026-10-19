@@ -6,7 +6,6 @@ const {
 } = require('@whiskeysockets/baileys');
 const pino = require('pino');
 const readline = require('readline');
-const fs = require('fs');
 
 // ==========================================
 // KONFIGURASI BOT & HARGA VOUCHER SUPER WIFI
@@ -14,30 +13,13 @@ const fs = require('fs');
 const ADMIN_NUMBER = '6283133882711'; 
 const BOT_NUMBER = '6283133882711'; 
 
-// Fungsi untuk membaca stok dari file stok.json
-function getStokVoucher() {
-    try {
-        if (!fs.existsSync('./stok.json')) {
-            const defaultStok = { "1": [], "2": [], "3": [], "4": [] };
-            fs.writeFileSync('./stok.json', JSON.stringify(defaultStok, null, 2));
-            return defaultStok;
-        }
-        const data = fs.readFileSync('./stok.json', 'utf8');
-        return JSON.parse(data);
-    } catch (e) {
-        console.error('Gagal membaca file stok.json:', e);
-        return { "1": [], "2": [], "3": [], "4": [] };
-    }
-}
-
-// Fungsi untuk menyimpan sisa stok ke stok.json secara permanen
-function saveStokVoucher(stokData) {
-    try {
-        fs.writeFileSync('./stok.json', JSON.stringify(stokData, null, 2));
-    } catch (e) {
-        console.error('Gagal menyimpan file stok.json:', e);
-    }
-}
+// Stok Kode Voucher Wi-Fi Sesuai Paket
+const stokVoucher = {
+    '1': ['3JAM-ABC12', '3JAM-XYZ34'],
+    '2': ['7JAM-QWE78', '7JAM-RTY90'],
+    '3': ['10JAM-UIO12', '10JAM-PAS34'],
+    '4': ['36JAM-ZXC56', '36JAM-VBN78']
+};
 
 const qrisGambar = {
     '1': './qris1.jpeg',
@@ -99,26 +81,31 @@ async function startBot() {
 
         const from = m.key.remoteJid;
         
+        // --- PERBAIKAN PENTING: Ekstraksi Nomor Asli Pelanggan ---
         let rawJid = from;
         if (m.key.participant) {
             rawJid = m.key.participant;
         }
+        // Ambil murni angka saja dari JID (menghilangkan @s.whatsapp.net, @lid, dll)
         let senderNumber = rawJid ? rawJid.replace(/[^0-9]/g, '') : '';
+        
+        // Jika karena suatu hal nomor terlalu pendek atau tidak valid, ambil dari pushName atau default
         if (senderNumber.length < 10) {
             senderNumber = m.pushName || 'Pelanggan';
         }
+        // ---------------------------------------------------------
 
         const body = m.message.conversation || m.message.extendedTextMessage?.text || '';
         const text = body.trim();
 
-        console.log(`[LOG] Dari JID: ${from} | Nomor: ${senderNumber} | Teks: "${text}" | fromMe: ${m.key.fromMe}`);
+        console.log(`[LOG] Dari JID: ${from} | Nomor Ekstraksi: ${senderNumber} | Teks: "${text}" | fromMe: ${m.key.fromMe}`);
 
         const isAdminAction = m.key.fromMe;
 
         if (isAdminAction) {
             const lowerText = text.toLowerCase().replace(/\s+/g, ''); 
 
-            // 1. Perintah Admin ACC (siap / siap 1 / siap 2)
+            // 1. Perintah Admin ACC
             if (lowerText.startsWith('siap')) {
                 const indexStr = lowerText.replace('siap', '');
                 const index = indexStr ? parseInt(indexStr) - 1 : 0; 
@@ -147,11 +134,8 @@ async function startBot() {
                 };
                 const namaPaket = daftarHargaNama[paketId];
 
-                let stokVoucher = getStokVoucher();
-
                 if (stokVoucher[paketId] && stokVoucher[paketId].length > 0) {
                     const kodeVoucher = stokVoucher[paketId].shift();
-                    saveStokVoucher(stokVoucher);
 
                     await sock.sendMessage(targetNum, {
                         text: `🎉 *PEMBAYARAN DITERIMA!*\n\n` +
@@ -172,7 +156,7 @@ async function startBot() {
                 return;
             }
 
-            // 2. Perintah Admin Cancel (cancel / cancel 1 / cancel 2)
+            // 2. Perintah Admin Cancel
             if (lowerText.startsWith('cancel')) {
                 const indexStr = lowerText.replace('cancel', '');
                 const index = indexStr ? parseInt(indexStr) - 1 : 0;
