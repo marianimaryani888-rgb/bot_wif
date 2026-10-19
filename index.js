@@ -28,7 +28,7 @@ const qrisGambar = {
     '4': './qris4.jpeg'
 };
 
-const transaksiPending = {};
+let transaksiPending = [];
 
 const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
 const question = (text) => new Promise((resolve) => rl.question(text, resolve));
@@ -81,45 +81,48 @@ async function startBot() {
 
         const from = m.key.remoteJid;
         
-        let senderNumber = from ? from.split('@')[0] : '';
+        // --- PERBAIKAN PENTING: Ekstraksi Nomor Asli Pelanggan ---
+        let rawJid = from;
         if (m.key.participant) {
-            senderNumber = m.key.participant.split('@')[0];
+            rawJid = m.key.participant;
         }
-        if (senderNumber.length > 15 && m.pushName) {
-            senderNumber = m.pushName;
+        // Ambil murni angka saja dari JID (menghilangkan @s.whatsapp.net, @lid, dll)
+        let senderNumber = rawJid ? rawJid.replace(/[^0-9]/g, '') : '';
+        
+        // Jika karena suatu hal nomor terlalu pendek atau tidak valid, ambil dari pushName atau default
+        if (senderNumber.length < 10) {
+            senderNumber = m.pushName || 'Pelanggan';
         }
+        // ---------------------------------------------------------
 
         const body = m.message.conversation || m.message.extendedTextMessage?.text || '';
         const text = body.trim();
 
-        console.log(`[LOG] Dari: ${senderNumber} | Teks: "${text}" | fromMe: ${m.key.fromMe}`);
+        console.log(`[LOG] Dari JID: ${from} | Nomor Ekstraksi: ${senderNumber} | Teks: "${text}" | fromMe: ${m.key.fromMe}`);
 
         const isAdminAction = m.key.fromMe;
 
         if (isAdminAction) {
-            const lowerText = text.toLowerCase().replace(/\s+/g, ''); // Hapus spasi (misal "siap 1" jadi "siap1")
+            const lowerText = text.toLowerCase().replace(/\s+/g, ''); 
 
-            // 1. Eksekusi SIAP (ACC)
+            // 1. Perintah Admin ACC
             if (lowerText.startsWith('siap')) {
                 const indexStr = lowerText.replace('siap', '');
-                const index = indexStr ? parseInt(indexStr) - 1 : 0; // Default ke-0 (urutan 1) jika hanya ketik "siap"
+                const index = indexStr ? parseInt(indexStr) - 1 : 0; 
 
-                const listPending = Object.values(transaksiPending);
-                listPending.sort((a, b) => a.timestamp - b.timestamp);
-
-                if (listPending.length === 0) {
+                if (transaksiPending.length === 0) {
                     await sock.sendMessage(from, { text: '⚠️ Tidak ada transaksi pending saat ini.' });
                     return;
                 }
 
-                if (isNaN(index) || index < 0 || index >= listPending.length) {
+                if (isNaN(index) || index < 0 || index >= transaksiPending.length) {
                     await sock.sendMessage(from, { 
-                        text: `⚠️ Urutan antrean tidak ditemukan!\nSaat ini hanya ada ${listPending.length} transaksi pending.` 
+                        text: `⚠️ Antrean #${index + 1} tidak ditemukan!\nSaat ini ada ${transaksiPending.length} pesanan aktif dalam antrean.` 
                     });
                     return;
                 }
 
-                const currentTrx = listPending[index];
+                const currentTrx = transaksiPending[index];
                 const targetNum = currentTrx.jId;
                 const paketId = currentTrx.paket;
 
@@ -134,7 +137,6 @@ async function startBot() {
                 if (stokVoucher[paketId] && stokVoucher[paketId].length > 0) {
                     const kodeVoucher = stokVoucher[paketId].shift();
 
-                    // Kirim voucher ke pembeli
                     await sock.sendMessage(targetNum, {
                         text: `🎉 *PEMBAYARAN DITERIMA!*\n\n` +
                             `Berikut adalah Kode Voucher Super Wifi Anda:\n` +
@@ -142,40 +144,36 @@ async function startBot() {
                             `Silakan masukkan kode tersebut di halaman login Wi-Fi. Terima kasih!`
                     });
 
-                    // Konfirmasi ke admin
                     await sock.sendMessage(from, { 
-                        text: `✅ Berhasil ACC pesanan antrean #${index + 1} (*${namaPaket}*)\nKode terkirim: *${kodeVoucher}*\nSisa stok: ${stokVoucher[paketId].length}` 
+                        text: `✅ Berhasil ACC pesanan antrean #${index + 1} (*${namaPaket}*)\nKode terkirim: *${kodeVoucher}*\nSisa stok paket: ${stokVoucher[paketId].length}` 
                     });
 
                     clearTimeout(currentTrx.timeout);
-                    delete transaksiPending[targetNum];
+                    transaksiPending.splice(index, 1); 
                 } else {
                     await sock.sendMessage(from, { text: `⚠️ Stok voucher untuk paket ${namaPaket} HABIS!` });
                 }
                 return;
             }
 
-            // 2. Eksekusi CANCEL (BATAL)
+            // 2. Perintah Admin Cancel
             if (lowerText.startsWith('cancel')) {
                 const indexStr = lowerText.replace('cancel', '');
                 const index = indexStr ? parseInt(indexStr) - 1 : 0;
 
-                const listPending = Object.values(transaksiPending);
-                listPending.sort((a, b) => a.timestamp - b.timestamp);
-
-                if (listPending.length === 0) {
+                if (transaksiPending.length === 0) {
                     await sock.sendMessage(from, { text: '⚠️ Tidak ada transaksi pending untuk dibatalkan.' });
                     return;
                 }
 
-                if (isNaN(index) || index < 0 || index >= listPending.length) {
+                if (isNaN(index) || index < 0 || index >= transaksiPending.length) {
                     await sock.sendMessage(from, { 
-                        text: `⚠️ Urutan antrean tidak ditemukan!\nSaat ini hanya ada ${listPending.length} transaksi pending.` 
+                        text: `⚠️ Antrean #${index + 1} tidak ditemukan!\nSaat ini ada ${transaksiPending.length} pesanan aktif dalam antrean.` 
                     });
                     return;
                 }
 
-                const currentTrx = listPending[index];
+                const currentTrx = transaksiPending[index];
                 const targetNum = currentTrx.jId;
                 const paketId = currentTrx.paket;
 
@@ -198,7 +196,7 @@ async function startBot() {
                 });
 
                 clearTimeout(currentTrx.timeout);
-                delete transaksiPending[targetNum];
+                transaksiPending.splice(index, 1);
                 return;
             }
             return;
@@ -215,7 +213,7 @@ async function startBot() {
                 `Balas dengan angka *1*, *2*, *3*, atau *4* untuk membeli.`;
             await sock.sendMessage(from, { text: menuText });
         }
-        else if (!['1', '2', '3', '4'].includes(text) && !transaksiPending[from]) {
+        else if (!['1', '2', '3', '4'].includes(text) && !transaksiPending.some(t => t.jId === from)) {
             await sock.sendMessage(from, { 
                 text: `Halo! Selamat datang di *Super Wifi*.\n\nSilakan ketik *beli* atau *pesan* untuk melanjutkan pembelian paket internet.` 
             });
@@ -223,31 +221,33 @@ async function startBot() {
         else if (['1', '2', '3', '4'].includes(text)) {
             const daftarPaket = {
                 '1': 'Paket 3 Jam (Rp 1.000)',
-                '2': 'Paket 7 Jam (Rp 2.000)',
-                '3': 'Paket 10 Jam (Rp 3.000)',
-                '4': 'Paket 36 Jam (Rp 5.000)'
+                '2': '7 Jam (Rp 2.000)',
+                '3': '10 Jam (Rp 3.000)',
+                '4': '36 Jam (Rp 5.000)'
             };
             const namaPaket = daftarPaket[text];
-            
-            if (transaksiPending[from]) {
-                clearTimeout(transaksiPending[from].timeout);
-            }
 
+            const trxId = Date.now();
             const timeoutId = setTimeout(async () => {
-                if (transaksiPending[from]) {
-                    delete transaksiPending[from];
+                const idx = transaksiPending.findIndex(t => t.id === trxId);
+                if (idx !== -1) {
+                    transaksiPending.splice(idx, 1);
                     await sock.sendMessage(from, { 
                         text: `⚠️ Waktu transaksi telah habis.\nPesanan untuk *${namaPaket}* dibatalkan otomatis.\n\nKetik *pesan* jika ingin memesan ulang.` 
                     });
                 }
             }, 5 * 60 * 1000);
 
-            transaksiPending[from] = { 
+            const newTrx = {
+                id: trxId,
                 jId: from,
-                paket: text, 
+                paket: text,
                 timestamp: Date.now(),
-                timeout: timeoutId 
+                timeout: timeoutId
             };
+
+            transaksiPending.push(newTrx);
+            const nomorAntrean = transaksiPending.length; 
 
             try {
                 await sock.sendMessage(from, {
@@ -266,19 +266,14 @@ async function startBot() {
                 });
             }
 
-            // Hitung nomor urutan antrean saat ini
-            const listPendingNow = Object.values(transaksiPending);
-            listPendingNow.sort((a, b) => a.timestamp - b.timestamp);
-            const pos = listPendingNow.findIndex(t => t.jId === from) + 1;
-
             const pesanAdmin = `📩 *NOTIFIKASI TAGIHAN BARU*\n\n` +
-                `Nomor Antrean: *#${pos}*\n` +
+                `Nomor Antrean: *#${nomorAntrean}*\n` +
                 `Pembeli: wa.me/${senderNumber}\n` +
                 `Paket: ${namaPaket}\n` +
                 `Status: Menunggu Pembayaran & Bukti Transfer\n\n` +
                 `Perintah Admin:\n` +
-                `- Ketik *siap ${pos}* (ACC pesanan ini)\n` +
-                `- Ketik *cancel ${pos}* (Batalkan pesanan ini)`;
+                `- Ketik *siap ${nomorAntrean}* (untuk ACC pesanan ini)\n` +
+                `- Ketik *cancel ${nomorAntrean}* (untuk membatalkan pesanan ini)`;
 
             const adminJidFormatted = BOT_NUMBER + '@s.whatsapp.net';
             await sock.sendMessage(adminJidFormatted, { text: pesanAdmin });
