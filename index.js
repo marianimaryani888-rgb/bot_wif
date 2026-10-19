@@ -92,15 +92,21 @@ async function startBot() {
             const body = msg.message.conversation || msg.message.extendedTextMessage?.text || '';
             const text = body.trim();
 
-            // Menu Utama
-            if (text.toLowerCase() === 'menu' || text.toLowerCase() === 'ping' || text === '0') {
-                const menuText = `=== 📶 SUPER WIFI - LOGIN ===\n\n` +
-                    `Silakan pilih paket internet wifi:\n` +
-                    `1. Paket 3 Jam - Rp 1.000\n` +
-                    `2. Paket 7 Jam - Rp 2.000\n` +
-                    `3. Paket 10 Jam - Rp 3.000\n` +
-                    `4. Paket 36 Jam - Rp 5.000\n\n` +
-                    `Balas dengan angka *1*, *2*, *3*, atau *4* untuk membeli.`;
+            // Deteksi sapaan otomatis atau kata kunci menu
+            const kataSapaan = ['halo', 'hi', 'p', 'assalamu\'alaikum', 'start', 'bot', 'menu', 'ping', '0'];
+            const isSapaan = kataSapaan.includes(text.toLowerCase());
+
+            // Tampilkan Menu Otomatis
+            if (isSapaan || text.toLowerCase() === 'menu') {
+                const menuText = `=== 📶 *SUPER WIFI - LOGIN* ===\n\n` +
+                    `Halo! Selamat datang di layanan voucher internet cepat.\n` +
+                    `Silakan pilih paket yang kamu inginkan:\n\n` +
+                    `1️⃣ *Paket 3 Jam* - Rp 1.000\n` +
+                    `2️⃣ *Paket 7 Jam* - Rp 2.000\n` +
+                    `3️⃣ *Paket 10 Jam* - Rp 3.000\n` +
+                    `4️⃣ *Paket 36 Jam* - Rp 5.000\n\n` +
+                    `👉 *Cara Beli:* Cukup balas pesan ini dengan mengetik angka paketnya saja (Contoh: *1* atau *2*).`;
+                
                 await sock.sendMessage(from, { text: menuText });
             }
 
@@ -119,15 +125,15 @@ async function startBot() {
                 try {
                     await sock.sendMessage(from, {
                         image: { url: qrisGambar[text] },
-                        caption: `Pembelian *${namaPaket}*\n\n` +
-                            `Silakan scan QRIS di atas untuk pembayaran paket ini.\n\n` +
-                            `Setelah transfer, ketik *!bayar* untuk konfirmasi.`
+                        caption: `🛒 Pembelian *${namaPaket}*\n\n` +
+                            `Silakan scan QRIS di atas untuk melakukan pembayaran.\n\n` +
+                            `Setelah selesai transfer, balas chat ini dengan mengetik: *!bayar*`
                     });
                 } catch (e) {
                     await sock.sendMessage(from, {
-                        text: `Pembelian *${namaPaket}*\n\n` +
-                            `Silakan transfer ke QRIS kami.\n\n` +
-                            `Setelah transfer, ketik *!bayar* untuk konfirmasi.`
+                        text: `🛒 Pembelian *${namaPaket}*\n\n` +
+                            `Silakan transfer ke QRIS pembayaran kami.\n\n` +
+                            `Setelah selesai transfer, balas chat ini dengan mengetik: *!bayar*`
                     });
                 }
             }
@@ -135,7 +141,7 @@ async function startBot() {
             // Pembeli Ketik !bayar
             else if (text.toLowerCase() === '!bayar') {
                 if (!transaksiPending[from]) {
-                    await sock.sendMessage(from, { text: '⚠️ Anda belum memilih paket. Ketik *menu* untuk melihat daftar paket.' });
+                    await sock.sendMessage(from, { text: '⚠️ Anda belum memilih paket. Kirim pesan "menu" untuk melihat daftar paket.' });
                     continue;
                 }
 
@@ -151,13 +157,13 @@ async function startBot() {
                 const pesanAdmin = `📩 *NOTIFIKASI PEMBAYARAN SUPER WIFI*\n\n` +
                     `Pembeli: wa.me/${from.split('@')[0]}\n` +
                     `Paket: ${namaPaket}\n\n` +
-                    `Cek saldo. Jika sudah masuk, ketik perintah berikut untuk ACC:\n` +
+                    `Cek mutasi/saldo. Jika sudah masuk, ACC dengan format:\n` +
                     `*!acc ${from.split('@')[0]} ${trx.paket}*`;
 
                 await sock.sendMessage(ADMIN_JID, { text: pesanAdmin });
 
                 await sock.sendMessage(from, {
-                    text: `Pembayaran Anda sedang diverifikasi oleh Admin.\nMohon tunggu sejenak, kode voucher akan dikirim otomatis setelah diverifikasi.`
+                    text: `✅ Konfirmasi diterima! Pembayaran Anda sedang diverifikasi oleh Admin.\nMohon tunggu sebentar, kode voucher akan dikirim otomatis ke sini.`
                 });
             }
 
@@ -176,10 +182,10 @@ async function startBot() {
                     const kodeVoucher = stokVoucher[paketId].shift();
 
                     await sock.sendMessage(targetNum, {
-                        text: `🎉 *PEMBAYARAN DITERIMA!*\n\n` +
+                        text: `🎉 *PEMBAYARAN DIVERIFIKASI!*\n\n` +
                             `Berikut adalah Kode Voucher Super Wifi Anda:\n` +
-                            `🔑 Kode: *${kodeVoucher}*\n\n` +
-                            `Silakan masukkan kode tersebut di halaman login Wi-Fi. Terima kasih!`
+                            `🔑 Kode: *${kodeVoucher}*` +
+                            `\n\nMasukkan kode tersebut di halaman login Wi-Fi. Terima kasih!`
                     });
 
                     await sock.sendMessage(from, { 
@@ -188,7 +194,7 @@ async function startBot() {
 
                     delete transaksiPending[targetNum];
                 } else {
-                    await sock.sendMessage(from, { text: `⚠️ Stok voucher paket ${paketId} HABIS!` });
+                    await sock.sendMessage(from, { text: `⚠️ Stok voucher paket ${paketId} KOSONG!` });
                 }
             }
         }
