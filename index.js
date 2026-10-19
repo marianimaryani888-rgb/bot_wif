@@ -79,13 +79,24 @@ async function startBot() {
         const m = chatUpdate.messages[0];
         if (!m.message) return;
 
+        // PENTING: Abaikan pesan yang dikirim oleh bot/admin sendiri agar tidak salah deteksi
+        if (m.key.fromMe) return;
+
         const from = m.key.remoteJid;
         const isGroup = from.endsWith('@g.us');
         
         // --- PERBAIKAN: Ekstraksi Nomor Asli Pelanggan yang Akurat ---
-        let senderJid = isGroup ? m.key.participant : from;
-        let senderNumber = senderJid ? senderJid.replace(/[^0-9]/g, '') : '';
+        let rawJid = isGroup ? m.key.participant : from;
         
+        if (m.key.remoteJidAlt && !isGroup) {
+            rawJid = m.key.remoteJidAlt;
+        }
+
+        let senderNumber = rawJid ? rawJid.replace(/[^0-9]/g, '') : '';
+        
+        if (!senderNumber || senderNumber.length < 10) {
+            senderNumber = rawJid ? rawJid.split('@')[0].replace(/[^0-9]/g, '') : '';
+        }
         if (!senderNumber || senderNumber.length < 10) {
             senderNumber = m.pushName || 'Pelanggan';
         }
