@@ -84,13 +84,7 @@ async function startBot() {
         const text = body.trim();
         const isAdminAction = m.key.fromMe;
 
-        // Ekstraksi Nomor Pelanggan yang bersih dari JID
-        let senderNumber = from ? from.replace(/[^0-9]/g, '') : '';
-        if (senderNumber.length < 10) {
-            senderNumber = m.pushName || 'Pelanggan';
-        }
-
-        console.log(`[LOG] Dari JID: ${from} | Nomor: ${senderNumber} | Teks: "${text}" | fromMe: ${isAdminAction}`);
+        console.log(`[LOG] Dari JID: ${from} | Teks: "${text}" | fromMe: ${isAdminAction}`);
 
         // ================= LOGIKA ADMIN =================
         if (isAdminAction) {
@@ -194,6 +188,12 @@ async function startBot() {
         }
 
         // ================= LOGIKA PEMBELI =================
+        // Ekstraksi Nomor Pelanggan Murni dari JID Chat Pembeli
+        let senderNumber = from ? from.replace(/[^0-9]/g, '') : '';
+        if (senderNumber.length < 10) {
+            senderNumber = m.pushName || 'Pelanggan';
+        }
+
         if (text.toLowerCase() === 'menu' || text.toLowerCase() === 'ping' || text === '0' || text.toLowerCase() === 'beli' || text.toLowerCase() === 'pesan') {
             const menuText = `=== 📶 SUPER WIFI - LOGIN ===\n\n` +
                 `Silakan pilih paket internet wifi:\n` +
