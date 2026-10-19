@@ -92,8 +92,8 @@ async function startBot() {
             const body = msg.message.conversation || msg.message.extendedTextMessage?.text || '';
             const text = body.trim();
 
-            // Menu Utama
-            if (text.toLowerCase() === 'menu' || text.toLowerCase() === 'ping' || text === '0') {
+            // Fungsi helper untuk menampilkan menu utama
+            const kirimMenuUtama = async (jid) => {
                 const menuText = `=== 📶 SUPER WIFI - LOGIN ===\n\n` +
                     `Silakan pilih paket internet wifi:\n` +
                     `1. Paket 3 Jam - Rp 1.000\n` +
@@ -101,7 +101,12 @@ async function startBot() {
                     `3. Paket 10 Jam - Rp 3.000\n` +
                     `4. Paket 36 Jam - Rp 5.000\n\n` +
                     `Balas dengan angka *1*, *2*, *3*, atau *4* untuk membeli.`;
-                await sock.sendMessage(from, { text: menuText });
+                await sock.sendMessage(jid, { text: menuText });
+            };
+
+            // Menu Utama / Trigger Manual
+            if (text.toLowerCase() === 'menu' || text.toLowerCase() === 'ping' || text === '0') {
+                await kirimMenuUtama(from);
             }
 
             // Pilihan Paket 1 sampai 4
@@ -190,6 +195,11 @@ async function startBot() {
                 } else {
                     await sock.sendMessage(from, { text: `⚠️ Stok voucher paket ${paketId} HABIS!` });
                 }
+            }
+
+            // DEFAULT: Jika user mengetik pesan bebas/random, langsung arahkan ke list voucher
+            else if (from !== ADMIN_JID) {
+                await kirimMenuUtama(from);
             }
         }
     });
