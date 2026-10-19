@@ -2,7 +2,8 @@ const {
     default: makeWASocket,
     useMultiFileAuthState,
     DisconnectReason,
-    fetchLatestBaileysVersion
+    fetchLatestBaileysVersion,
+    downloadMediaMessage
 } = require('@whiskeysockets/baileys');
 const pino = require('pino');
 const readline = require('readline');
@@ -45,7 +46,6 @@ async function startBot() {
         printQRInTerminal: false
     });
 
-    // Minta Pairing Code jika belum terdaftar
     if (!sock.authState.creds.registered) {
         let phoneNumber = BOT_NUMBER;
         if (!phoneNumber) {
@@ -53,7 +53,6 @@ async function startBot() {
         }
         phoneNumber = phoneNumber.replace(/[^0-9]/g, '');
         
-        // Jeda 15 detik agar koneksi socket benar-benar stabil di server cloud
         setTimeout(async () => {
             try {
                 if (!sock.authState.creds.registered) {
@@ -89,10 +88,11 @@ async function startBot() {
             if (!msg.message || msg.key.fromMe) continue;
 
             const from = msg.key.remoteJid;
-            const body = msg.message.conversation || msg.message.extendedTextMessage?.text || '';
-            const text = body.trim();
+            const isImage = msg.message.imageMessage || msg.message.extendedTextMessage?.contextInfo?.quotedMessage?.imageMessage;
+            const body = msg.message.conversation || msg.message.extendedTextMessage?.text || msg.message.imageMessage?.caption || '';
+            const text = body.trim().toLowerCase();
 
-            // Fungsi helper untuk menampilkan menu utama
+            // Helper untuk kirim menu utama
             const kirimMenuUtama = async (jid) => {
                 const menuText = `=== 📶 SUPER WIFI - LOGIN ===\n\n` +
                     `Silakan pilih paket internet wifi:\n` +
@@ -104,12 +104,12 @@ async function startBot() {
                 await sock.sendMessage(jid, { text: menuText });
             };
 
-            // Menu Utama / Trigger Manual
-            if (text.toLowerCase() === 'menu' || text.toLowerCase() === 'ping' || text === '0') {
+            // 1. Dengar Kata Kunci Beli/Menu/Pesan
+            if (['menu', 'ping', '0', 'beli', 'pesan'].includes(text)) {
                 await kirimMenuUtama(from);
             }
 
-            // Pilihan Paket 1 sampai 4
+            // 2. Pilih Paket 1 - 4
             else if (['1', '2', '3', '4'].includes(text)) {
                 const daftarPaket = {
                     '1': 'Paket 3 Jam (Rp 1.000)',
@@ -125,22 +125,22 @@ async function startBot() {
                     await sock.sendMessage(from, {
                         image: { url: qrisGambar[text] },
                         caption: `Pembelian *${namaPaket}*\n\n` +
-                            `Silakan scan QRIS di atas untuk pembayaran paket ini.\n\n` +
-                            `Setelah transfer, ketik *!bayar* untuk konfirmasi.`
+                            `Silakan scan QRIS di atas untuk pembayaran.\n\n` +
+                            `📸 *Setelah transfer, langsung kirimkan FOTO/SCREENSHOT BUKTI TRANSFER di sini.*`
                     });
                 } catch (e) {
                     await sock.sendMessage(from, {
                         text: `Pembelian *${namaPaket}*\n\n` +
                             `Silakan transfer ke QRIS kami.\n\n` +
-                            `Setelah transfer, ketik *!bayar* untuk konfirmasi.`
+                            `📸 *Setelah transfer, langsung kirimkan FOTO/SCREENSHOT BUKTI TRANSFER di sini.*`
                     });
                 }
             }
 
-            // Pembeli Ketik !bayar
-            else if (text.toLowerCase() === '!bayar') {
+            // 3. Deteksi Pembeli Mengirim Foto (Bukti Transfer)
+            else if (isImage && from !== ADMIN_JID) {
                 if (!transaksiPending[from]) {
-                    await sock.sendMessage(from, { text: '⚠️ Anda belum memilih paket. Ketik *menu* untuk melihat daftar paket.' });
+                    await sock.sendMessage(from, { text: '⚠️ Anda belum memilih paket. Ketik *beli* atau *pesan* terlebih dahulu.' });
                     continue;
                 }
 
@@ -153,29 +153,53 @@ async function startBot() {
                 };
                 const namaPaket = daftarHargaNama[trx.paket];
 
-                const pesanAdmin = `📩 *NOTIFIKASI PEMBAYARAN SUPER WIFI*\n\n` +
-                    `Pembeli: wa.me/${from.split('@')[0]}\n` +
-                    `Paket: ${namaPaket}\n\n` +
-                    `Cek saldo. Jika sudah masuk, ketik perintah berikut untuk ACC:\n` +
-                    `*!acc ${from.split('@')[0]} ${trx.paket}*`;
+                // Download gambar dari pembeli
+                const buffer = await downloadMediaMessage(msg, 'buffer', {});
 
-                await sock.sendMessage(ADMIN_JID, { text: pesanAdmin });
+                const pesanAdmin = `📩 *BUKTI PEMBAYARAN BARU*\n\n` +
+                    `Pembeli: wa.me/${from.split('@')[0]}\n` +
+                    `Paket: ${namaPaket}\n` +
+                    `ID Pembeli: ${from}\n\n` +
+                    `💡 *CARA ACC CEPAT:*\n` +
+                    `Reply / Balas foto ini lalu ketik:\n` +
+                    `*!acc ${trx.paket}* (atau format lama: *!acc <nomor> <paket>*)`;
+
+                await sock.sendMessage(ADMIN_JID, { 
+                    image: buffer, 
+                    caption: pesanAdmin 
+                });
 
                 await sock.sendMessage(from, {
-                    text: `Pembayaran Anda sedang diverifikasi oleh Admin.\nMohon tunggu sejenak, kode voucher akan dikirim otomatis setelah diverifikasi.`
+                    text: `✅ Bukti transfer Anda telah diterima dan sedang diverifikasi Admin.\nKode voucher akan dikirim otomatis setelah diverifikasi.`
                 });
             }
 
-            // Perintah Admin untuk ACC (!acc <nomor> <paket>)
+            // 4. Perintah ACC Ringkas dari Admin
             else if (text.startsWith('!acc') && from === ADMIN_JID) {
-                const args = text.split(' ');
-                if (args.length < 3) {
-                    await sock.sendMessage(from, { text: 'Format salah! Gunakan: !acc <nomor> <paket>' });
-                    continue;
+                const args = body.trim().split(' ');
+                let targetNum = '';
+                let paketId = '';
+
+                // Opsi A: Admin Reply pesan notifikasi dan cuma ketik `!acc <paket>` (contoh: !acc 1)
+                const quotedMsg = msg.message.extendedTextMessage?.contextInfo?.quotedMessage;
+                if (quotedMsg && args.length === 2) {
+                    paketId = args[1];
+                    const quotedText = quotedMsg.imageMessage?.caption || quotedMsg.conversation || '';
+                    const match = quotedText.match(/ID Pembeli:\s*([^\s]+)/);
+                    if (match) {
+                        targetNum = match[1];
+                    }
+                } 
+                // Opsi B: Format manual lama (`!acc <nomor> <paket>`)
+                else if (args.length >= 3) {
+                    targetNum = args[1] + '@s.whatsapp.net';
+                    paketId = args[2];
                 }
 
-                const targetNum = args[1] + '@s.whatsapp.net';
-                const paketId = args[2];
+                if (!targetNum || !paketId) {
+                    await sock.sendMessage(from, { text: '⚠️ Format salah!\n\nCara simpel: Reply foto notifikasi lalu ketik *!acc 1*\nAtau manual: *!acc <nomor> <paket*' });
+                    continue;
+                }
 
                 if (stokVoucher[paketId] && stokVoucher[paketId].length > 0) {
                     const kodeVoucher = stokVoucher[paketId].shift();
@@ -188,7 +212,7 @@ async function startBot() {
                     });
 
                     await sock.sendMessage(from, { 
-                        text: `✅ Berhasil mengirim voucher *${kodeVoucher}* ke ${args[1]}. Sisa stok: ${stokVoucher[paketId].length}` 
+                        text: `✅ Berhasil mengirim voucher *${kodeVoucher}* ke ${targetNum.split('@')[0]}. Sisa stok: ${stokVoucher[paketId].length}` 
                     });
 
                     delete transaksiPending[targetNum];
@@ -197,9 +221,9 @@ async function startBot() {
                 }
             }
 
-            // DEFAULT: Jika user mengetik pesan bebas/random, langsung arahkan ke list voucher
+            // 5. Default Chat Random (Teks)
             else if (from !== ADMIN_JID) {
-                await kirimMenuUtama(from);
+                await sock.sendMessage(from, { text: 'Silahkan ketik *beli* atau *pesan* untuk lanjut beli voucher.' });
             }
         }
     });
