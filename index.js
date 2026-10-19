@@ -80,17 +80,13 @@ async function startBot() {
         if (!m.message) return;
 
         const from = m.key.remoteJid;
+        const isGroup = from.endsWith('@g.us');
         
-        // --- PERBAIKAN PENTING: Ekstraksi Nomor Asli Pelanggan ---
-        let rawJid = from;
-        if (m.key.participant) {
-            rawJid = m.key.participant;
-        }
-        // Ambil murni angka saja dari JID (menghilangkan @s.whatsapp.net, @lid, dll)
-        let senderNumber = rawJid ? rawJid.replace(/[^0-9]/g, '') : '';
+        // --- PERBAIKAN: Ekstraksi Nomor Asli Pelanggan yang Akurat ---
+        let senderJid = isGroup ? m.key.participant : from;
+        let senderNumber = senderJid ? senderJid.replace(/[^0-9]/g, '') : '';
         
-        // Jika karena suatu hal nomor terlalu pendek atau tidak valid, ambil dari pushName atau default
-        if (senderNumber.length < 10) {
+        if (!senderNumber || senderNumber.length < 10) {
             senderNumber = m.pushName || 'Pelanggan';
         }
         // ---------------------------------------------------------
@@ -187,8 +183,8 @@ async function startBot() {
 
                 await sock.sendMessage(targetNum, {
                     text: `❌ *TRANSAKSI DIBATALKAN*\n\n` +
-                        `Mohon maaf, transaksi untuk *${namaPaket}* dibatalkan oleh Admin.\n\n` +
-                        `Silakan ketik *pesan* jika ingin memesan ulang.`
+                          `Mohon maaf, transaksi untuk *${namaPaket}* dibatalkan oleh Admin.\n\n` +
+                          `Silakan ketik *pesan* jika ingin memesan ulang.`
                 });
 
                 await sock.sendMessage(from, { 
@@ -275,7 +271,7 @@ async function startBot() {
                 `- Ketik *siap ${nomorAntrean}* (untuk ACC pesanan ini)\n` +
                 `- Ketik *cancel ${nomorAntrean}* (untuk membatalkan pesanan ini)`;
 
-            const adminJidFormatted = BOT_NUMBER + '@s.whatsapp.net';
+            const adminJidFormatted = ADMIN_NUMBER + '@s.whatsapp.net';
             await sock.sendMessage(adminJidFormatted, { text: pesanAdmin });
         }
     });
