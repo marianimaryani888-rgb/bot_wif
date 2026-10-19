@@ -80,27 +80,46 @@ async function startBot() {
         if (!m.message) return;
 
         const from = m.key.remoteJid;
-        const senderNumber = from ? from.split('@')[0] : '';
+        
+        let senderNumber = from ? from.split('@')[0] : '';
+        if (m.key.participant) {
+            senderNumber = m.key.participant.split('@')[0];
+        }
+        if (senderNumber.length > 15 && m.pushName) {
+            senderNumber = m.pushName;
+        }
+
         const body = m.message.conversation || m.message.extendedTextMessage?.text || '';
         const text = body.trim();
 
         console.log(`[LOG] Dari: ${senderNumber} | Teks: "${text}" | fromMe: ${m.key.fromMe}`);
 
-        // DETEKSI ADMIN: Jika pesan dikirim oleh kita sendiri (fromMe: true), maka itu pasti aksi Admin!
         const isAdminAction = m.key.fromMe;
 
         if (isAdminAction) {
-            if (text.toLowerCase() === 'siap') {
-                console.log(`[ADMIN ACTION] Mengeksekusi 'siap'...`);
+            const lowerText = text.toLowerCase().replace(/\s+/g, ''); // Hapus spasi (misal "siap 1" jadi "siap1")
+
+            // 1. Eksekusi SIAP (ACC)
+            if (lowerText.startsWith('siap')) {
+                const indexStr = lowerText.replace('siap', '');
+                const index = indexStr ? parseInt(indexStr) - 1 : 0; // Default ke-0 (urutan 1) jika hanya ketik "siap"
+
                 const listPending = Object.values(transaksiPending);
+                listPending.sort((a, b) => a.timestamp - b.timestamp);
 
                 if (listPending.length === 0) {
                     await sock.sendMessage(from, { text: '⚠️ Tidak ada transaksi pending saat ini.' });
                     return;
                 }
 
-                listPending.sort((a, b) => a.timestamp - b.timestamp);
-                const currentTrx = listPending[0];
+                if (isNaN(index) || index < 0 || index >= listPending.length) {
+                    await sock.sendMessage(from, { 
+                        text: `⚠️ Urutan antrean tidak ditemukan!\nSaat ini hanya ada ${listPending.length} transaksi pending.` 
+                    });
+                    return;
+                }
+
+                const currentTrx = listPending[index];
                 const targetNum = currentTrx.jId;
                 const paketId = currentTrx.paket;
 
@@ -125,7 +144,7 @@ async function startBot() {
 
                     // Konfirmasi ke admin
                     await sock.sendMessage(from, { 
-                        text: `✅ Berhasil ACC pesanan *${namaPaket}* untuk ${targetNum.split('@')[0]}\nKode terkirim: *${kodeVoucher}*\nSisa stok: ${stokVoucher[paketId].length}` 
+                        text: `✅ Berhasil ACC pesanan antrean #${index + 1} (*${namaPaket}*)\nKode terkirim: *${kodeVoucher}*\nSisa stok: ${stokVoucher[paketId].length}` 
                     });
 
                     clearTimeout(currentTrx.timeout);
@@ -136,17 +155,27 @@ async function startBot() {
                 return;
             }
 
-            if (text.toLowerCase() === 'cancel') {
-                console.log(`[ADMIN ACTION] Mengeksekusi 'cancel'...`);
+            // 2. Eksekusi CANCEL (BATAL)
+            if (lowerText.startsWith('cancel')) {
+                const indexStr = lowerText.replace('cancel', '');
+                const index = indexStr ? parseInt(indexStr) - 1 : 0;
+
                 const listPending = Object.values(transaksiPending);
+                listPending.sort((a, b) => a.timestamp - b.timestamp);
 
                 if (listPending.length === 0) {
                     await sock.sendMessage(from, { text: '⚠️ Tidak ada transaksi pending untuk dibatalkan.' });
                     return;
                 }
 
-                listPending.sort((a, b) => a.timestamp - b.timestamp);
-                const currentTrx = listPending[0];
+                if (isNaN(index) || index < 0 || index >= listPending.length) {
+                    await sock.sendMessage(from, { 
+                        text: `⚠️ Urutan antrean tidak ditemukan!\nSaat ini hanya ada ${listPending.length} transaksi pending.` 
+                    });
+                    return;
+                }
+
+                const currentTrx = listPending[index];
                 const targetNum = currentTrx.jId;
                 const paketId = currentTrx.paket;
 
@@ -165,14 +194,14 @@ async function startBot() {
                 });
 
                 await sock.sendMessage(from, { 
-                    text: `❌ Berhasil membatalkan pesanan *${namaPaket}* dari ${targetNum.split('@')[0]}` 
+                    text: `❌ Berhasil membatalkan pesanan antrean #${index + 1} (*${namaPaket}*)` 
                 });
 
                 clearTimeout(currentTrx.timeout);
                 delete transaksiPending[targetNum];
                 return;
             }
-            return; // Abaikan pesan fromMe lainnya selain "siap" dan "cancel"
+            return;
         }
 
         // ================= LOGIKA PEMBELI =================
@@ -194,9 +223,9 @@ async function startBot() {
         else if (['1', '2', '3', '4'].includes(text)) {
             const daftarPaket = {
                 '1': 'Paket 3 Jam (Rp 1.000)',
-                '2': '7 Jam (Rp 2.000)',
-                '3': '10 Jam (Rp 3.000)',
-                '4': '36 Jam (Rp 5.000)'
+                '2': 'Paket 7 Jam (Rp 2.000)',
+                '3': 'Paket 10 Jam (Rp 3.000)',
+                '4': 'Paket 36 Jam (Rp 5.000)'
             };
             const namaPaket = daftarPaket[text];
             
@@ -237,13 +266,20 @@ async function startBot() {
                 });
             }
 
+            // Hitung nomor urutan antrean saat ini
+            const listPendingNow = Object.values(transaksiPending);
+            listPendingNow.sort((a, b) => a.timestamp - b.timestamp);
+            const pos = listPendingNow.findIndex(t => t.jId === from) + 1;
+
             const pesanAdmin = `📩 *NOTIFIKASI TAGIHAN BARU*\n\n` +
+                `Nomor Antrean: *#${pos}*\n` +
                 `Pembeli: wa.me/${senderNumber}\n` +
                 `Paket: ${namaPaket}\n` +
                 `Status: Menunggu Pembayaran & Bukti Transfer\n\n` +
-                `Perintah Admin:\n- Ketik *siap* (untuk ACC & kirim voucher)\n- Ketik *cancel* (untuk batalkan pesanan)`;
+                `Perintah Admin:\n` +
+                `- Ketik *siap ${pos}* (ACC pesanan ini)\n` +
+                `- Ketik *cancel ${pos}* (Batalkan pesanan ini)`;
 
-            // Kirim notifikasi tagihan ke chat bot sendiri (admin)
             const adminJidFormatted = BOT_NUMBER + '@s.whatsapp.net';
             await sock.sendMessage(adminJidFormatted, { text: pesanAdmin });
         }
