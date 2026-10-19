@@ -75,7 +75,6 @@ async function startBot() {
         }
     });
 
-    // Menggunakan event 'messages.set' atau memantau semua upsert tanpa filter ketat fromMe
     sock.ev.on('messages.upsert', async (chatUpdate) => {
         const m = chatUpdate.messages[0];
         if (!m.message) return;
@@ -85,18 +84,18 @@ async function startBot() {
         const body = m.message.conversation || m.message.extendedTextMessage?.text || '';
         const text = body.trim();
 
-        console.log(`[LOG] Pesan dari: ${senderNumber} | Teks: "${text}" | fromMe: ${m.key.fromMe}`);
+        console.log(`[LOG] Dari: ${senderNumber} | Teks: "${text}" | fromMe: ${m.key.fromMe}`);
 
-        // Cek apakah ini perintah dari admin (nomor admin sendiri)
-        const isAdmin = senderNumber === ADMIN_NUMBER;
+        // DETEKSI ADMIN: Jika pesan dikirim oleh kita sendiri (fromMe: true), maka itu pasti aksi Admin!
+        const isAdminAction = m.key.fromMe;
 
-        if (isAdmin) {
+        if (isAdminAction) {
             if (text.toLowerCase() === 'siap') {
-                console.log(`[ADMIN] Eksekusi perintah SIAP...`);
+                console.log(`[ADMIN ACTION] Mengeksekusi 'siap'...`);
                 const listPending = Object.values(transaksiPending);
 
                 if (listPending.length === 0) {
-                    await sock.sendMessage(ADMIN_NUMBER + '@s.whatsapp.net', { text: '⚠️ Tidak ada transaksi pending saat ini.' });
+                    await sock.sendMessage(from, { text: '⚠️ Tidak ada transaksi pending saat ini.' });
                     return;
                 }
 
@@ -116,7 +115,7 @@ async function startBot() {
                 if (stokVoucher[paketId] && stokVoucher[paketId].length > 0) {
                     const kodeVoucher = stokVoucher[paketId].shift();
 
-                    // Kirim ke pembeli
+                    // Kirim voucher ke pembeli
                     await sock.sendMessage(targetNum, {
                         text: `🎉 *PEMBAYARAN DITERIMA!*\n\n` +
                             `Berikut adalah Kode Voucher Super Wifi Anda:\n` +
@@ -125,24 +124,24 @@ async function startBot() {
                     });
 
                     // Konfirmasi ke admin
-                    await sock.sendMessage(ADMIN_NUMBER + '@s.whatsapp.net', { 
+                    await sock.sendMessage(from, { 
                         text: `✅ Berhasil ACC pesanan *${namaPaket}* untuk ${targetNum.split('@')[0]}\nKode terkirim: *${kodeVoucher}*\nSisa stok: ${stokVoucher[paketId].length}` 
                     });
 
                     clearTimeout(currentTrx.timeout);
                     delete transaksiPending[targetNum];
                 } else {
-                    await sock.sendMessage(ADMIN_NUMBER + '@s.whatsapp.net', { text: `⚠️ Stok voucher untuk paket ${namaPaket} HABIS!` });
+                    await sock.sendMessage(from, { text: `⚠️ Stok voucher untuk paket ${namaPaket} HABIS!` });
                 }
                 return;
             }
 
             if (text.toLowerCase() === 'cancel') {
-                console.log(`[ADMIN] Eksekusi perintah CANCEL...`);
+                console.log(`[ADMIN ACTION] Mengeksekusi 'cancel'...`);
                 const listPending = Object.values(transaksiPending);
 
                 if (listPending.length === 0) {
-                    await sock.sendMessage(ADMIN_NUMBER + '@s.whatsapp.net', { text: '⚠️ Tidak ada transaksi pending untuk dibatalkan.' });
+                    await sock.sendMessage(from, { text: '⚠️ Tidak ada transaksi pending untuk dibatalkan.' });
                     return;
                 }
 
@@ -165,7 +164,7 @@ async function startBot() {
                         `Silakan ketik *pesan* jika ingin memesan ulang.`
                 });
 
-                await sock.sendMessage(ADMIN_NUMBER + '@s.whatsapp.net', { 
+                await sock.sendMessage(from, { 
                     text: `❌ Berhasil membatalkan pesanan *${namaPaket}* dari ${targetNum.split('@')[0]}` 
                 });
 
@@ -173,12 +172,10 @@ async function startBot() {
                 delete transaksiPending[targetNum];
                 return;
             }
+            return; // Abaikan pesan fromMe lainnya selain "siap" dan "cancel"
         }
 
-        // Jangan proses pesan dari bot/admin sendiri untuk menu pembeli
-        if (m.key.fromMe) return;
-
-        // 2. Logika Pembeli (Menu & Pilih Paket)
+        // ================= LOGIKA PEMBELI =================
         if (text.toLowerCase() === 'menu' || text.toLowerCase() === 'ping' || text === '0' || text.toLowerCase() === 'beli' || text.toLowerCase() === 'pesan') {
             const menuText = `=== 📶 SUPER WIFI - LOGIN ===\n\n` +
                 `Silakan pilih paket internet wifi:\n` +
@@ -246,7 +243,9 @@ async function startBot() {
                 `Status: Menunggu Pembayaran & Bukti Transfer\n\n` +
                 `Perintah Admin:\n- Ketik *siap* (untuk ACC & kirim voucher)\n- Ketik *cancel* (untuk batalkan pesanan)`;
 
-            await sock.sendMessage(ADMIN_NUMBER + '@s.whatsapp.net', { text: pesanAdmin });
+            // Kirim notifikasi tagihan ke chat bot sendiri (admin)
+            const adminJidFormatted = BOT_NUMBER + '@s.whatsapp.net';
+            await sock.sendMessage(adminJidFormatted, { text: pesanAdmin });
         }
     });
 }
