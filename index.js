@@ -94,14 +94,13 @@ async function startBot() {
 
             const isAdmin = senderNumber === ADMIN_NUMBER;
 
-            // Jika pesan dikirim oleh bot sendiri, tapi BUKAN dari admin yang chat ke diri sendiri, abaikan
             if (msg.key.fromMe && !isAdmin) continue;
 
             console.log(`[PESAN MASUK] Dari: ${senderNumber} | Teks: "${text}"`);
 
-            // 1. Perintah Admin untuk ACC ketik "siap"
-            if (text.toLowerCase() === 'siap' && isAdmin) {
-                console.log(`[ADMIN ACTION] Admin mengetik 'siap'. Memproses antrean...`);
+            // 1. Perintah Admin untuk ACC ketik ".siap"
+            if (text.toLowerCase() === '.siap' && isAdmin) {
+                console.log(`[ADMIN ACTION] Admin mengetik '.siap'. Memproses antrean...`);
                 const listPending = Object.values(transaksiPending);
 
                 if (listPending.length === 0) {
@@ -125,7 +124,6 @@ async function startBot() {
                 if (stokVoucher[paketId] && stokVoucher[paketId].length > 0) {
                     const kodeVoucher = stokVoucher[paketId].shift();
 
-                    // Kirim voucher ke pembeli
                     await sock.sendMessage(targetNum, {
                         text: `🎉 *PEMBAYARAN DITERIMA!*\n\n` +
                             `Berikut adalah Kode Voucher Super Wifi Anda:\n` +
@@ -133,7 +131,6 @@ async function startBot() {
                             `Silakan masukkan kode tersebut di halaman login Wi-Fi. Terima kasih!`
                     });
 
-                    // Konfirmasi ke admin
                     await sock.sendMessage(from, { 
                         text: `✅ Berhasil ACC pesanan *${namaPaket}* untuk ${targetNum.split('@')[0]}\nKode terkirim: *${kodeVoucher}*\nSisa stok: ${stokVoucher[paketId].length}` 
                     });
@@ -145,9 +142,9 @@ async function startBot() {
                 }
             }
 
-            // 2. Perintah Admin untuk Cancel ketik "cancel"
-            else if (text.toLowerCase() === 'cancel' && isAdmin) {
-                console.log(`[ADMIN ACTION] Admin mengetik 'cancel'. Membatalkan antrean teratas...`);
+            // 2. Perintah Admin untuk Cancel ketik ".cancel"
+            else if (text.toLowerCase() === '.cancel' && isAdmin) {
+                console.log(`[ADMIN ACTION] Admin mengetik '.cancel'. Membatalkan antrean teratas...`);
                 const listPending = Object.values(transaksiPending);
 
                 if (listPending.length === 0) {
@@ -252,7 +249,7 @@ async function startBot() {
                     `Pembeli: wa.me/${senderNumber}\n` +
                     `Paket: ${namaPaket}\n` +
                     `Status: Menunggu Pembayaran & Bukti Transfer\n\n` +
-                    `Perintah Admin:\n- Ketik *siap* (untuk ACC & kirim voucher)\n- Ketik *cancel* (untuk batalkan pesanan)`;
+                    `Perintah Admin:\n- Ketik *.siap* (untuk ACC & kirim voucher)\n- Ketik *.cancel* (untuk batalkan pesanan)`;
 
                 const adminJidFormatted = ADMIN_NUMBER + '@s.whatsapp.net';
                 await sock.sendMessage(adminJidFormatted, { text: pesanAdmin });
