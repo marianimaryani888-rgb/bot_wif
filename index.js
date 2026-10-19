@@ -92,13 +92,12 @@ async function startBot() {
             const body = msg.message.conversation || msg.message.extendedTextMessage?.text || '';
             const text = body.trim();
 
-            // Jika pesan dikirim oleh bot sendiri ke chat lain, abaikan
-            // TAPI jika pesan dikirim dari nomor admin (walaupun dari perangkat kita sendiri), izinkan dibaca
-            if (msg.key.fromMe && senderNumber !== ADMIN_NUMBER) continue;
+            const isAdmin = senderNumber === ADMIN_NUMBER;
+
+            // Jika pesan dikirim oleh bot sendiri, tapi BUKAN dari admin yang chat ke diri sendiri, abaikan
+            if (msg.key.fromMe && !isAdmin) continue;
 
             console.log(`[PESAN MASUK] Dari: ${senderNumber} | Teks: "${text}"`);
-
-            const isAdmin = senderNumber === ADMIN_NUMBER;
 
             // 1. Perintah Admin untuk ACC ketik "siap"
             if (text.toLowerCase() === 'siap' && isAdmin) {
